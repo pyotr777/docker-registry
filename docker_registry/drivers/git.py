@@ -21,9 +21,14 @@ docker_registry.drivers.file
 This is a simple git based driver.
 
 """
+import docker_registry.core.boto as coreboto
+# from docker_registry.core import exceptions
+from docker_registry.core import compat
+from docker_registry.core import lru
+from docker_registry.core import driver
 
+import logging
 import os
-import file
 from docker_registry.drivers import file
 
 class Storage(driver.Base):
