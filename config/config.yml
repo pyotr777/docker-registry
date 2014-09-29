@@ -163,7 +163,7 @@ elliptics:
 
 # This is the default configuration when no flavor is specified
 dev: &dev
-    <<: *local
+    <<: *git
     loglevel: _env:LOGLEVEL:debug
     debug_versions: _env:DEBUG_VERSIONS:true
     search_backend: _env:SEARCH_BACKEND:sqlalchemy
