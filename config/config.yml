@@ -75,8 +75,10 @@ local: &local
 # git storage
 git: &git
     <<: *common
-    storage: git
-    storage_path: _env:STORAGE_PATH:/tmp/gitregistry
+    storage: gitdriver
+    loglevel: debug
+    debug: true
+    storage_path: _env:STORAGE_PATH:/Users/peterbryzgalov/tmp/gitregistry
 
 
 s3: &s3
