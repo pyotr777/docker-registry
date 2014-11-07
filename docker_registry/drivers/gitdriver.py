@@ -28,7 +28,7 @@ from docker_registry.core import lru
 logger = logging.getLogger(__name__)
 
 print str(file.Storage.supports_bytes_range)
-version = "0.5.04"
+version = "0.5.07"
 repositorylibrary = "repositories/library/"
 imagesdirectory = "images/"
 #
@@ -49,7 +49,6 @@ class bcolors:
 
 class Storage(file.Storage):
 
-    storage_path = None
     gitrepo = None
     valid_imageID = "[0-9a-f]{64}"
     imageID_pattern = None
@@ -61,8 +60,9 @@ class Storage(file.Storage):
         self.imageID_pattern = re.compile(self.valid_imageID)
 
     def _init_path(self, path=None, create=False):
-        print("_init_path "+path)
-        path = os.path.join(self._root_path, path) if path else self._root_path
+        rpath = self.gitrepo.working_dir if self.imagesDir(path) else self._root_path
+        path = os.path.join(rpath, path) if path else rpath
+        print(bcolors.OKBLUE+"_init_path "+path+bcolors.ENDC)
         if create is True:
             dirname = os.path.dirname(path)
             if not os.path.exists(dirname):
@@ -84,8 +84,8 @@ class Storage(file.Storage):
         else:
             # Presumably read from imges directory 
             print(bcolors.HEADER+"get_content from images "+path+bcolors.ENDC)
-            # TODO Rewrite to use gitdriver backend to read contents from working dir
-            path = self.prepareCheckout(path)
+            if self.needLayer(path):
+                path = self.prepareCheckout(path)
             print "Reading from "+ str(path)
             try:
                 with open(path, mode='rb') as f:
@@ -178,12 +178,14 @@ class Storage(file.Storage):
 
     def exists(self, path):
         logger.info("exists at %s",path)
-        if path.find(imagesdirectory) >= 0:
+        if self.imagesDir(path):
             # Read from images directory
             if self.needLayer(path):
                 # change layer to layer.tar
                 path = path + ".tar"
-            path = self.prepareCheckout(path)
+                path = self.prepareCheckout(path)
+            else:
+                path = self._init_path(path)
             return os.path.exists(path)    
         else :
             # Presumably read from repositories directory
@@ -232,6 +234,9 @@ class Storage(file.Storage):
         if parts[1] == "layer":
             return True
         return False
+
+    def imagesDir(self,path):
+        return path.find(imagesdirectory) >= 0
     
                
 
