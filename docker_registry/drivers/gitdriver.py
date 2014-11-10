@@ -30,7 +30,7 @@ from docker_registry.core import lru
 
 logger = logging.getLogger(__name__)
 
-version = "0.6.03f"
+version = "0.6.07d"
 _root_dir = "/Users/peterbryzgalov/tmp/"
 repository_path = "repositories/library/"
 images_path = "images/"
@@ -45,10 +45,24 @@ class bcolors:
     OKBLUE = '\033[0;34m'
     OKGREEN = '\033[0;32m'
     OKYELLOW = '\033[0;33m'
+    CYAN = '\033[0;36m'
     WARNING = '\033[0;31m'
+    IMPORTANT = '\033[1;30;47m'
     FAIL = '\033[1;31m'
-    INVERTED = '\033[0;30;47m'
+    INVERTED = '\033[0;30;44m'
     ENDC = '\033[0m'
+
+class bcolorsnone:
+    HEADER = ''
+    OKBLUE = ''
+    OKGREEN = ''
+    OKYELLOW = ''
+    CYAN = ''
+    WARNING = ''
+    IMPORTANT = ''
+    FAIL = ''
+    INVERTED = ''
+    ENDC = ''
 
 
 class Storage(file.Storage):
@@ -56,7 +70,7 @@ class Storage(file.Storage):
     gitrepo = None
     valid_imageID = "[0-9a-f]{64}"
     imageID_pattern = None
-    layer_size = 0 # store size of layer tar
+    layer_size = {} # store size of layer tar for images
 
     def __init__(self, path=None, config=None):
         global working_dir, storage_dir
@@ -69,19 +83,23 @@ class Storage(file.Storage):
         self.imageID_pattern = re.compile(self.valid_imageID)
 
     def _init_path(self, path=None, create=False):
+        org_path = path
         global working_dir, storage_dir        
         self.gitrepo.getInfoFromPath(path)
         # Define path prefix: working dir (for images/) or storage_dir
         if self.imagesDir(path):
             if path is None:
+                logger.warning("Empty path in _init_path %s", path)
                 return None
             pre_path = working_dir
-            basename = os.path.basename(path)
-            path = os.path.join(pre_path, basename)
+            parts = os.path.split(path)
+            basename = parts[1]
+            imagedir = os.path.basename(parts[0])
+            path = os.path.join(pre_path, imagedir, basename)            
         else:
             pre_path = storage_dir
             path = os.path.join(pre_path, path) if path else pre_path
-        # print(bcolors.OKBLUE+"_init_path "+path+bcolors.ENDC)
+        print bcolors.OKBLUE+"_init_path "+org_path+" -> "+path+bcolors.ENDC
         if create is True:
             dirname = os.path.dirname(path)
             if not os.path.exists(dirname):
@@ -100,7 +118,7 @@ class Storage(file.Storage):
     @lru.set
     def put_content(self, path, content):
         path = self._init_path(path, create=True)
-        print bcolors.OKBLUE+"put_content at "+ path+ " "+ str(content)[:150] + bcolors.ENDC
+        print bcolors.CYAN+"put_content at "+ path+ " "+ str(content)[:150] + bcolors.ENDC
         with open(path, mode='wb') as f:
             f.write(content)
         return path
@@ -140,7 +158,7 @@ class Storage(file.Storage):
 
     def stream_write(self, path, fp):
         path = self._init_path(path, create=True)
-        print bcolors.HEADER+"stream_write " + path+ bcolors.ENDC
+        print bcolors.IMPORTANT+"stream_write " + path+ bcolors.ENDC
         with open(path, mode='wb') as f:
             try:
                 while True:
@@ -150,8 +168,8 @@ class Storage(file.Storage):
                     f.write(buf)
             except IOError:
                 pass
-        self.layer_size = self.get_size(path)
-        print "stream_write finished "+str(self.layer_size)
+        self.layer_size[self.gitrepo.imageID] = self.get_size(path)
+        print "stream_write finished "+str(self.layer_size[self.gitrepo.imageID])
         return
 
     def list_directory(self, path=None):
@@ -201,8 +219,12 @@ class Storage(file.Storage):
         except OSError as ex:
             print "Not found " + path
             if self.needLayer(path):
-                print self.layer_size
-                return self.layer_size
+                if self.layer_size[self.gitrepo.imageID] is not None:
+                    print self.layer_size[self.gitrepo.imageID]
+                    return self.layer_size[self.gitrepo.imageID]
+                else:
+                    print 0
+                    return 0
             print ex
             raise exceptions.FileNotFoundError('%s is not there' % path)
 
@@ -274,11 +296,10 @@ class gitRepo():
     def initSettings(self):
         self.imageID = None
         self.parentID = None
-        self.image_tag = None
-        # Information that is stored in repositories/library may not be updated for next image
-        # It is the case for intermediate images.
-        #self.image_name = None
-        
+        self.image_tag = None        
+
+        # TODO get back cleanDir after commiting works correctly
+        #self.cleanDir()
 
 
     # Init git repository
@@ -299,6 +320,7 @@ class gitRepo():
 
     # called from put_content()
     def getInfoFromPath(self,path=None,content=None):
+        print "getinfo "+path
         if path is None:
             print bcolors.INVERTED+"path is None in getInfoFromPath"+bcolors.ENDC
         # path should be ...reposiroties/library/imagename/something
@@ -348,7 +370,8 @@ class gitRepo():
                 self.createCommit()                
             else:
                 # Id have data for different imageID, store previous image now
-                if self.last_checked_imageID is not None and self.last_checked_imageID != self.imageID:
+                if self.last_checked_imageID is not None \
+                    and self.last_checked_imageID != self.imageID:
                     print bcolors.WARNING+"Image ID changed" + bcolors.ENDC
                     newID = self.imageID
                     self.imageID = self.last_checked_imageID
@@ -554,7 +577,6 @@ class gitRepo():
         if (OSErrors):
             print "Had some OSErrors"
         tar.close()
-        os.remove(source)
         return len(tar_members)
 
     # Adds record to imagetable imageID : commitID
@@ -715,5 +737,20 @@ class gitRepo():
         print "Tar created "+ new_tar_path
         return new_tar_path
 
+    def cleanDir(self, dir=None):
+            ignore=(".git")
+            global working_dir
+            if dir is None:
+                dir = working_dir
 
+            print "cleaning "+dir
+            for item in os.listdir(dir):
+                path = os.path.join(dir,item)
+                if item not in ignore:
+                    print "Removing " + item + " " + str(os.path.isfile(path))
+                    if os.path.isfile(path):
+                        os.remove(path)
+                    else:
+                        shutil.rmtree(path)
+            print "Directory ("+dir+") cleaned"
         
