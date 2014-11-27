@@ -6,62 +6,83 @@ Docker-Registry
 About this document
 ===================
 
-As the documentation evolves with different registry versions, be sure that before reading any further you do:
+As the documentation evolves with different registry versions, be sure that before reading any further you:
 
  * check which version of the registry you are running
  * switch to the corresponding tag to access the README that matches your product version
 
-The stable, released version is currently the [0.8.1 tag](https://github.com/docker/docker-registry/tree/0.8.1).
+The stable, released version is the [0.9.0 tag](https://github.com/docker/docker-registry/tree/0.9.0).
 
+Please also have a quick look at the [FAQ](FAQ.md) before reporting bugs.
 
-Quick start
-===========
+# Table of Contents
+- [Quick Start](#quick-start)
+- [Configuration mechanism overview](#configuration-mechanism-overview)
+- [Configuration flavors](#configuration-flavors)
+  - [Example config](#example-config)
+- [Available configuration options](#available-configuration-options)
+  - [General options](#general-options)
+    - [Authentication options](#authentication-options)
+    - [Search-engine options](#search-engine-options)
+      - [sqlalchemy](#sqlalchemy)
+    - [Mirroring Options](#mirroring-options)
+    - [Cache options](#cache-options)
+    - [Storage options](#storage-options)
+      - [storage file](#storage-file)
+        - [Persistent storage](#persistent-storage)
+      - [storage s3](#storage-s3)
+- [Your own config](#your-own-config)
+- [Advanced use](#advanced-user)
+- [Drivers](#drivers)
+- [For developers](#for-developers)
+
+# Quick start
 
 The fastest way to get running:
 
- * install docker according to the [following instructions](https://docs.docker.com/installation/#installation)
+ * [install docker](https://docs.docker.com/installation/#installation)
  * run the registry: `docker run -p 5000:5000 registry`
 
-That will use the
-[official image from the Docker index](https://registry.hub.docker.com/_/registry/).
+That will use the [official image from the Docker hub](https://registry.hub.docker.com/_/registry/).
 
-Here is another example that will launch a container on port 5000, and store images in an Amazon S3 bucket:  
+Here is a slightly more complex example that launches a registry on port 5000, using an Amazon S3 bucket to store images with a custom path, and enables the search endpoint:
+
 ```
 docker run \
          -e SETTINGS_FLAVOR=s3 \
-         -e AWS_BUCKET=acme-docker \
+         -e AWS_BUCKET=mybucket \
          -e STORAGE_PATH=/registry \
-         -e AWS_KEY=AKIAHSHB43HS3J92MXZ \
-         -e AWS_SECRET=xdDowwlK7TJajV1Y7EoOZrmuPEJlHYcNP2k4j49T \
-         -e SEARCH_BACKEND=sqlalchemy \
+         -e AWS_KEY=myawskey \
+         -e AWS_SECRET=myawssecret \
          -p 5000:5000 \
          registry
 ```
 
-See [config_sample.yml](config/config_sample.yml) for all available environment variables.
 
-Create the configuration
-========================
+# Configuration mechanism overview
 
-The Docker Registry comes with a sample configuration file,
-`config_sample.yml`. Copy this to `config.yml` to provide a basic
-configuration:
+By default, the registry will use the [config_sample.yml](config/config_sample.yml) configuration to start.
 
-```
-cp config/config_sample.yml config/config.yml
-```
+Individual configuration options from that file may be overridden using environment variables. Example: `docker run -e STORAGE_PATH=/registry`.
 
-Configuration flavors
-=====================
+You may also use different "flavors" from that file (see below).
 
-Docker Registry can run in several flavors. This enables you to run it
-in development mode, production mode or your own predefined mode.
+Finally, you can use your own configuration file (see below).
+
+
+# Configuration flavors
+
+The registry can be instructed to use a specific flavor from a configuration file.
+
+This mechanism lets you define different running "mode" (eg: "development", "production" or anything else).
 
 In the `config_sample.yml` file, you'll see several sample flavors:
 
 1. `common`: used by all other flavors as base settings
 1. `local`: stores data on the local filesystem
 1. `s3`: stores data in an AWS S3 bucket
+1. `ceph-s3`: stores data in a Ceph cluster via a Ceph Object Gateway, using the S3 API
+1. `azureblob`: stores data in an Microsoft Azure Blob Storage ([(docs)](ADVANCED.md))
 1. `dev`: basic configuration using the `local` flavor
 1. `test`: used by unit tests
 1. `prod`: production configuration (basically a synonym for the `s3` flavor)
@@ -73,27 +94,29 @@ In the `config_sample.yml` file, you'll see several sample flavors:
 
 You can define your own flavors by adding a new top-level yaml key.
 
-You can specify which flavor to run by setting `SETTINGS_FLAVOR` in your
-environment: `export SETTINGS_FLAVOR=dev`
+To specify which flavor you want to run, set the `SETTINGS_FLAVOR`
+environment variable: `export SETTINGS_FLAVOR=dev`
 
 The default flavor is `dev`.
 
-NOTE: it's possible to load environment variables from the config file
+NOTE: it's possible to load environment variables from within the config file
 with a simple syntax: `_env:VARIABLENAME[:DEFAULT]`. Check this syntax
 in action in the example below...
 
 
-#### Example config
+## Example config
 
 ```yaml
 
-common:
+common: &common
+    standalone: true
     loglevel: info
     search_backend: "_env:SEARCH_BACKEND:"
     sqlalchemy_index_database:
         "_env:SQLALCHEMY_INDEX_DATABASE:sqlite:////tmp/docker-registry.db"
 
 prod:
+    <<: *common
     loglevel: warn
     storage: s3
     s3_access_key: _env:AWS_S3_ACCESS_KEY
@@ -106,41 +129,20 @@ prod:
     to_addr: my@myself.com
 
 dev:
+    <<: *common
     loglevel: debug
     storage: local
     storage_path: /home/myself/docker
 
 test:
+    <<: *common
     storage: local
     storage_path: /tmp/tmpdockertmp
 ```
 
 
-Location of the config file
-===========================
 
-### DOCKER_REGISTRY_CONFIG
-
-Specify the config file to be used by setting `DOCKER_REGISTRY_CONFIG` in your
-environment: `export DOCKER_REGISTRY_CONFIG=config.yml`
-
-The default location of the config file is `config.yml`, located in
-the `config` subdirectory.  If `DOCKER_REGISTRY_CONFIG` is a relative
-path, that path is expanded relative to the `config` subdirectory.
-
-### Docker image
-When building an image using the Dockerfile or using an image from the
-[Docker index](https://index.docker.io/_/registry/), the default config is
-`config_sample.yml`.
-
-It is also possible to mount the configuration file into the docker image
-
-```
-sudo docker run -p 5000:5000 -v /home/user/registry-conf:/registry-conf -e DOCKER_REGISTRY_CONFIG=/registry-conf/config.yml registry
-```
-
-Available configuration options
-===============================
+# Available configuration options
 
 When using the `config_sample.yml`, you can pass all options through as environment variables. See [`config_sample.yml`](config/config_sample.yml) for the mapping.
 
@@ -149,19 +151,18 @@ When using the `config_sample.yml`, you can pass all options through as environm
 1. `loglevel`: string, level of debugging. Any of python's
    [logging](http://docs.python.org/2/library/logging.html) module levels:
    `debug`, `info`, `warn`, `error` or `critical`
-1. `debug_versions`: boolean, enable the `/_versions` endpoint for debugging.
+1. `debug`: boolean, make the `/_ping` endpoint output more useful information, such as library versions and host information.
 1. `storage_redirect`: Redirect resource requested if storage engine supports
    this, e.g. S3 will redirect signed URLs, this can be used to offload the
    server.
 1. `boto_host`/`boto_port`: If you are using `storage: s3` the
    [standard boto config file locations](http://docs.pythonboto.org/en/latest/boto_config_tut.html#details)
    (`/etc/boto.cfg, ~/.boto`) will be used.  If you are using a
-   *non*-Amazon S3-compliant object store, in one of the boto config files'
+   *non*-Amazon S3-compliant object store (such as Ceph), in one of the boto config files'
    `[Credentials]` section, set `boto_host`, `boto_port` as appropriate for the
-   service you are using.
-1. `bugsnag`: The bugsnag API key (note that if you don't use the official docker container, you need to install the registry with bugsnag enabled: `pip install docker-registry[bugsnag]`)
+   service you are using. Alternatively, set `boto_host` and `boto_port` in the config file.
 
-### Authentication options
+## Authentication options
 
 1. `standalone`: boolean, run the server in stand-alone mode. This means that
    the Index service on index.docker.io will not be used for anything. This
@@ -175,28 +176,7 @@ When using the `config_sample.yml`, you can pass all options through as environm
    index. You should provide your own method of authentication (such as Basic
    auth).
 
-#### Privileged access
-
-1. `privileged_key`: allows you to make direct requests to the registry by using
-   an RSA key pair. The value is the path to a file containing the public key.
-   If it is not set, privileged access is disabled.
-
-##### Generating keys with `openssl`
-
-You will need to install the python-rsa package (`pip install rsa`) in addition to using `openssl`.
-Generating the public key using openssl will lead to producing a key in a format not supported by 
-the RSA library the registry is using.
-
-Generate private key:
-
-    openssl genrsa  -out private.pem 2048
-
-Associated public key :
-
-    pyrsa-priv2pub -i private.pem -o public.pem
-
-
-### Search-engine options
+## Search-engine options
 
 The Docker Registry can optionally index repository information in a
 database for the `GET /v1/search` [endpoint][search-endpoint].  You
@@ -204,7 +184,7 @@ can configure the backend with a configuration like:
 
 The `search_backend` setting selects the search backend to use.  If
 `search_backend` is empty, no index is built, and the search endpoint always
-returns empty results.  
+returns empty results.
 
 1. `search_backend`: The name of the search backend engine to use.
    Currently supported backends are:
@@ -220,7 +200,10 @@ common:
   search_backend: foo.registry.index.xapian
 ```
 
-#### sqlalchemy
+In this case, the module is imported, and an instance of its `Index`
+class is used as the search backend.
+
+### sqlalchemy
 
 Use [SQLAlchemy][] as the search backend.
 
@@ -235,10 +218,16 @@ common:
   sqlalchemy_index_database: sqlite:////tmp/docker-registry.db
 ```
 
-In this case, the module is imported, and an instance of it's `Index`
-class is used as the search backend.
+On initialization, the `SQLAlchemyIndex` class checks the database
+version.  If the database doesn't exist yet (or does exist, but lacks
+a `version` table), the `SQLAlchemyIndex` creates the database and
+required tables.  To avoid several Gunicorn workers racing to create
+the database, you should launch your registry with
+[--preload][gunicorn-preload].  For example:
 
-### Mirroring Options
+    $ docker run -e GUNICORN_OPTS=[--preload] -p 5000:5000 registry
+
+## Mirroring Options
 
 All mirror options are placed in a `mirroring` section.
 
@@ -257,7 +246,7 @@ common:
     tags_cache_ttl: 172800 # 2 days
 ```
 
-### Cache options
+## Cache options
 
 It's possible to add an LRU cache to access small files. In this case you need
 to spawn a [redis-server](http://redis.io/) configured in
@@ -265,7 +254,7 @@ to spawn a [redis-server](http://redis.io/) configured in
 shows an example to enable the LRU cache using the config directive `cache_lru`.
 
 Once this feature is enabled, all small files (tags, meta-data) will be cached
-in Redis. When using a remote storage backend (like Amazon S3), it will speeds
+in Redis. When using a remote storage backend (like Amazon S3), it will speed
 things up dramatically since it will reduce roundtrips to S3.
 
 All config settings are placed in a `cache` or `cache_lru` section.
@@ -276,27 +265,6 @@ All config settings are placed in a `cache` or `cache_lru` section.
   1. `password`: Authentication password
 
 
-### Email options
-
-Settings these options makes the Registry send an email on each code Exception:
-
-1. `email_exceptions`:
-  1. `smtp_host`: hostname to connect to using SMTP
-  1. `smtp_port`: port number to connect to using SMTP
-  1. `smtp_login`: username to use when connecting to authenticated SMTP
-  1. `smtp_password`: password to use when connecting to authenticated SMTP
-  1. `smtp_secure`: boolean, true for TLS to using SMTP. this could be a path
-                    to the TLS key file for client authentication.
-  1. `from_addr`: email address to use when sending email
-  1. `to_addr`: email address to send exceptions to
-
-Example:
-
-```yaml
-test:
-    email_exceptions:
-        smtp_host: localhost
-```
 
 ## Storage options
 
@@ -308,17 +276,19 @@ To use and install one of these alternate storages:
 
  * `pip install docker-registry-driver-NAME`
  * in the configuration set `storage` to `NAME`
- * add any other storage dependent configuraiton option to the conf file
+ * add any other storage dependent configuration option to the conf file
  * review the storage specific documentation for additional dependency or configuration instructions.
 
- Currently, we are aware of the following storage driver:
+ Currently, we are aware of the following storage drivers:
 
+  * [azure](https://github.com/ahmetalpbalkan/docker-registry-driver-azure)
   * [elliptics](https://github.com/noxiouz/docker-registry-driver-elliptics)
   * [swift](https://github.com/bacongobbler/docker-registry-driver-swift)
   * [gcs](https://github.com/dmp42/docker-registry-driver-gcs)
   * [glance](https://github.com/dmp42/docker-registry-driver-glance)
+  * [oss](https://github.com/chris-jin/docker-registry-driver-alioss.git)
 
-### storage: file
+### storage file
 
 1. `storage_path`: Path on the filesystem where to store data
 
@@ -341,7 +311,7 @@ Example:
 docker run -p 5000 -v /tmp/registry:/tmp/registry registry
 ```
 
-### storage: s3
+### storage s3
 AWS Simple Storage Service options
 
 1. `s3_access_key`: string, S3 access key
@@ -352,7 +322,12 @@ AWS Simple Storage Service options
       server-side by S3 and will be stored in an encrypted form while at rest
       in S3.
 1. `s3_secure`: boolean, true for HTTPS to S3
-1. `boto_bucket`: string, the bucket name
+1. `s3_use_sigv4`: boolean, true for USE_SIGV4 (boto_host needs to be set or use_sigv4 will be ignored by boto.)
+1. `boto_bucket`: string, the bucket name for *non*-Amazon S3-compliant object store
+1. `boto_host`: string, host for *non*-Amazon S3-compliant object store
+1. `boto_port`: for *non*-Amazon S3-compliant object store
+1. `boto_debug`: for *non*-Amazon S3-compliant object store
+1. `boto_calling_format`: string, the fully qualified class name of the boto calling format to use when accessing S3 or a *non*-Amazon S3-compliant object store
 1. `storage_path`: string, the sub "folder" where image data will be stored.
 
 Example:
@@ -366,135 +341,30 @@ prod:
   s3_secret_key: xdDowwlK7TJajV1Y7EoOZrmuPEJlHYcNP2k4j49T
 ```
 
-Run the Registry
-----------------
+# Your own config
 
-### Recommended: run the registry docker container
+Start from a copy of [config_sample.yml](config/config_sample.yml).
 
- * install docker according to the [following instructions](http://docs.docker.io/installation/#installation)
- * run the registry: `docker run -p 5000:5000 registry`
-
-or
+Then, start your registry with a mount point to expose your new configuration inside the container (`-v /home/me/myfolder:/registry-conf`), and point to it using the `DOCKER_REGISTRY_CONFIG` environment variable:
 
 ```
-docker run \
-         -e SETTINGS_FLAVOR=s3 \
-         -e AWS_BUCKET=acme-docker \
-         -e STORAGE_PATH=/registry \
-         -e AWS_KEY=AKIAHSHB43HS3J92MXZ \
-         -e AWS_SECRET=xdDowwlK7TJajV1Y7EoOZrmuPEJlHYcNP2k4j49T \
-         -e SEARCH_BACKEND=sqlalchemy \
-         -p 5000:5000 \
-         registry
+sudo docker run -p 5000:5000 -v /home/me/myfolder:/registry-conf -e DOCKER_REGISTRY_CONFIG=/registry-conf/mysuperconfig.yml registry
 ```
 
-NOTE: The container will try to allocate the port 5000. If the port
-is already taken, find out which container is already using it by running `docker ps`
+# Advanced use
 
-### Advanced: install the registry on an existing server
+For more features and advanced options, have a look at the [advanced features documentation](ADVANCED.md)
 
-#### On Ubuntu
+# Drivers
 
-Install the system requirements for building a Python library:
+For more backend drivers, please read [drivers.md](DRIVERS.md)
 
-```
-sudo apt-get install build-essential python-dev libevent-dev python-pip liblzma-dev
-```
+# For developers
 
-Then install the Registry app:
-
-```
-sudo pip install docker-registry
-```
-
-If you need extra requirements, like bugsnag, or new-relic specify them:
-
-```
-sudo pip install docker-registry[bugsnag,newrelic]
-```
-
-
-(or clone the repository and `pip install .`)
-
-#### On Red Hat-based systems:
-
-Install the required dependencies:
-```
-sudo yum install python-devel libevent-devel python-pip gcc xz-devel
-```
-
-NOTE: On RHEL and CentOS you will need the
-[EPEL](http://fedoraproject.org/wiki/EPEL) repostitories enabled. Fedora
-should not require the additional repositories.
-
-Then install the Registry app:
-
-```
-sudo python-pip install docker-registry[bugsnag,newrelic]
-```
-
-(or clone the repository and `pip install .`)
-
-#### Run it
-
-```
-docker-registry
-```
-
-### How do I setup user accounts?
-
-The standalone registry does not provide account management. For simple
-access control, you can set up an nginx or Apache frontend with basic
-auth enabled (see `contrib/` for examples).
-
-### What about a Production environment?
-
-The recommended setting to run the Registry in a prod environment is gunicorn
-behind a nginx server which supports chunked transfer-encoding (nginx >= 1.3.9).
-
-#### nginx
-
-[Here is an nginx configuration file example.](https://github.com/docker/docker-registry/blob/master/contrib/nginx/nginx.conf), which applies to versions < 1.3.9 which are compiled with the [HttpChunkinModule](http://wiki.nginx.org/HttpChunkinModule). 
-
-[This is another example nginx configuration file](https://github.com/docker/docker-registry/blob/master/contrib/nginx/nginx_1-3-9.conf) that applies to versions of nginx greater than 1.3.9 that have support for the chunked_transfer_encoding directive.
-
-And you might want to add
-[Basic auth on Nginx](http://wiki.nginx.org/HttpAuthBasicModule) to protect it
-(if you're not using it on your local network):
-
-
-#### Apache
-
-Enable mod_proxy using `a2enmod proxy_http`, then use this snippet forward
-requests to the Docker Registry:
-
-```
-  ProxyPreserveHost  On
-  ProxyRequests      Off
-  ProxyPass          /  http://localhost:5000/
-  ProxyPassReverse   /  http://localhost:5000/
-```
-
-#### Advanced start options (NOT recommended)
-
-If you want greater control over gunicorn:
-
-```
-gunicorn -c contrib/gunicorn.py docker_registry.wsgi:application
-```
-
-or even bare
-
-```
-gunicorn --access-logfile - --error-logfile - -k gevent -b 0.0.0.0:5000 -w 4 --max-requests 100 docker_registry.wsgi:application
-```
-
-For developers
---------------
-
-Read CONTRIBUTE.md
+Read [contributing](CONTRIBUTING.md)
 
 [search-endpoint]: http://docs.docker.com/reference/api/docker-io_api/#search
 [SQLAlchemy]: http://docs.sqlalchemy.org/
-[create_engine]:
-  http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine
+[create_engine]: http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine
+[gunicorn-preload]: http://gunicorn-docs.readthedocs.org/en/latest/settings.html#preload-app
+

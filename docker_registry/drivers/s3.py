@@ -7,12 +7,19 @@ This is a s3 based driver.
 
 """
 
+# This fixes an issue where boto sends unicode to gevent.socket.getaddrinfo in
+# an eventlet causing the event pool to hang in a deadlock state.
+# This initiates the unicode => idna conversion outside of getaddrinfo,
+# preventing the deadlock.
+# See https://github.com/gevent/gevent/issues/349 for context.
+u'fix for gevent deadlock'.encode('idna')
+
 import gevent.monkey
 gevent.monkey.patch_all()
 
 import docker_registry.core.boto as coreboto
-# from docker_registry.core import exceptions
 from docker_registry.core import compat
+from docker_registry.core import exceptions
 from docker_registry.core import lru
 
 import logging
@@ -84,6 +91,12 @@ class Storage(coreboto.Base):
         else:
             self.signer = None
 
+        if self._config.s3_use_sigv4 is True:
+            if self._config.boto_host is None:
+                logger.warn("No S3 Host specified, Boto won't use SIGV4!")
+            boto.config.add_section('s3')
+            boto.config.set('s3', 'use-sigv4', 'True')
+
         if self._config.s3_region is not None:
             return boto.s3.connect_to_region(
                 region_name=self._config.s3_region,
@@ -146,3 +159,13 @@ class Storage(coreboto.Base):
 
         # Have cloudfront? Sign it
         return self.signer(path, expire_time=60)
+
+    def get_content(self, path, tries=0):
+        try:
+            return super(Storage, self).get_content(path)
+        except exceptions.FileNotFoundError as e:
+            if tries <= 3:
+                time.sleep(.1)
+                return self.get_content(path, tries + 1)
+            else:
+                raise e
