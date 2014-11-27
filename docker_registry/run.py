@@ -102,4 +102,7 @@ def run_gunicorn():
     args += env.source('GUNICORN_OPTS')
     args.append('docker_registry.wsgi:application')
     # Stringify all args and call
-    os.execl(*[str(v) for v in args])
+    logger.info("args in run_gunicorn: %s", args)
+    l = [str(v) for v in args]
+    logger.info("l=%s",l)
+    os.execl(*l)
