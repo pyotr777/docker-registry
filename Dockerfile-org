@@ -6,7 +6,7 @@
 # TO_RUN:         docker run -p 5000:5000 registry
 
 # Latest Ubuntu LTS
-FROM peter/dev:latest
+FROM ubuntu:14.04
 
 # Update
 RUN apt-get update \
@@ -27,16 +27,12 @@ RUN pip install /docker-registry/depends/docker-registry-core
 
 # Install registry
 RUN pip install file:///docker-registry#egg=docker-registry[bugsnag,newrelic,cors]
-RUN pip install nose
-RUN pip install mock
 
 RUN patch \
  $(python -c 'import boto; import os; print os.path.dirname(boto.__file__)')/connection.py \
  < /docker-registry/contrib/boto_header_patch.diff
 
-RUN pip install  /docker-registry/git-driver
-
-ENV DOCKER_REGISTRY_CONFIG /docker-registry/config/config.yml
+ENV DOCKER_REGISTRY_CONFIG /docker-registry/config/config_sample.yml
 ENV SETTINGS_FLAVOR dev
 
 EXPOSE 5000
