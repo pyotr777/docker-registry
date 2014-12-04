@@ -30,7 +30,7 @@ from docker_registry.core import lru
 
 logger = logging.getLogger(__name__)
 
-version = "0.7.37a"
+version = "0.7.39a"
 #
 # Store only contnets of layer archive in git
 #
@@ -107,10 +107,10 @@ class Storage(file.Storage):
         # Define path prefix: working dir (for images/) or storage_dir
         if path.endswith("_inprogress"):
             logprint.info("Init path "+path,"IMPORTANT")
-            call_stack = traceback.format_stack()
-            for call in call_stack:
-                logprint.info(call,"OKYELLOW")
-            path = os.path.join(storage_dir, path) if path else storage_dir
+            #call_stack = traceback.format_stack()
+            #for call in call_stack:
+            #    logprint.info(call,"OKYELLOW")
+            #path = os.path.join(storage_dir, path) if path else storage_dir
         elif self.needLayer(path):
             logprint.info("Redirect path from "+path, "OKBLUE")
             parts = os.path.split(path)
@@ -545,11 +545,17 @@ class gitRepo():
             logprint.info("git checked out " + str(parent_commit) + " ?")
             logprint.info(self.gitcom.logf("--graph","--all"))
             logprint.info(bcolors.code["ENDC"])
-                        
-        comment = self.readJSON()["container_config"]["Cmd"]
+          
+        comment = None
+        try :
+            comment = self.readJSON()["container_config"]["Cmd"]
+        except KeyError:
+            logprint.error("Cannon get Cmd from json "+str(self.readJSON()))
+            
         if comment is None:
             comment = "#"
 
+        
         # UNTAR
         self.storeLayer()
 
@@ -613,10 +619,14 @@ class gitRepo():
         filelist_path = os.path.join(working_dir, filelist)        
         ffilelist = open(filelist_path, mode="wb")     
         logger.info("untar from %s to %s",source,dst)
-        tar=tarfile.open(source)
-        tar_members = tar.getnames()
-        logprint.info("Tar members # : "+ str(len(tar_members)))
-        logprint.info(str(tar_members[0:150]))
+        try :
+            tar=tarfile.open(source)
+            tar_members = tar.getnames()
+            logprint.info("Tar members # : "+ str(len(tar_members)))
+            logprint.info(str(tar_members[0:150]))
+        except Exception as ex:
+            logprint.error(ex)
+            tar_members = []
         IOErrors = False
         OSErrors = False
         if (len(tar_members) > 1):
@@ -637,7 +647,12 @@ class gitRepo():
             logprint.info("Had some IOErrors")
         if (OSErrors):
             logprint.info("Had some OSErrors")
-        tar.close()
+        if tar is not None:
+            try :
+                tar.close()
+            except Exception as ex:
+                logprint.error(ex)
+
         os.remove(source)  # Remove tar "layer"
         return len(tar_members)
 
@@ -743,8 +758,9 @@ class gitRepo():
     # and from createCommit when need temporary branch name
     def makeBranchName(self,tag=None):
         if self.image_name is None:
-            logprint.info("Image name is None. Fail to set branch name.","FAIL")
-            raise exceptions.Exception('Image name is not set')
+            logprint.error("Image name is None. Use name \"master\"")
+            # raise exceptions.Exception('Image name is not set')
+            self.image_name="master"
 
         branch_name = None
         if tag is None:

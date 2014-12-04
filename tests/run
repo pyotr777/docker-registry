@@ -1,5 +1,7 @@
 #!/bin/bash
 
+cp /Users/peterbryzgalov/work/docker-registry-driver-git/docker_registry/drivers/gitdriver.py /Users/peterbryzgalov/work/docker-registry/docker_registry/drivers/
+docker rm reg
+docker rmi reg
 docker build --rm -t reg .
-
 docker run -ti --name reg reg /bin/bash
