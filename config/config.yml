@@ -78,7 +78,7 @@ git: &git
     storage: gitdriver
     loglevel: debug
     debug: true
-    storage_path: _env:STORAGE_PATH:/Users/peterbryzgalov/gitstorage
+    storage_path: _env:STORAGE_PATH:/tmp/registry
 
 
 s3: &s3

@@ -6,7 +6,7 @@ from docker_registry import testing
 from docker_registry.testing import mock_boto  # noqa
 
 # Mock our s3 - xxx this smells like byte-range support is questionnable...
-from . import mock_s3   # noqa
+# from . import mock_s3   # noqa
 
 
 def getinit(name):

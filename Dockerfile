@@ -34,7 +34,8 @@ RUN patch \
  $(python -c 'import boto; import os; print os.path.dirname(boto.__file__)')/connection.py \
  < /docker-registry/contrib/boto_header_patch.diff
 
-RUN pip install  /docker-registry/git-driver
+RUN pip install GitPython
+RUN mkdir /tmp/registry
 
 ENV DOCKER_REGISTRY_CONFIG /docker-registry/config/config.yml
 ENV SETTINGS_FLAVOR dev
