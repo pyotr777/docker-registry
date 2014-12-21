@@ -78,7 +78,8 @@ git: &git
     storage: gitdriver
     loglevel: debug
     debug: true
-    storage_path: _env:STORAGE_PATH:/tmp/registry
+    storage_path: _env:storage_path:/Users/peterbryzgalov/work/gittest
+   # storage_path: _env:storage_path:/tmp/registry
 
 
 s3: &s3
