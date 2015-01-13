@@ -4,9 +4,9 @@ import shutil
 import yaml
 import os
 
-src = "/Users/peterbryzgalov/work/docker-registry-driver-git/docker_registry/drivers/gitdriver.py"
-dst = "/Users/peterbryzgalov/work/docker-registry/docker_registry/drivers/gitdriver.py"
-shutil.copyfile(src,dst)
+#src = "/Users/peterbryzgalov/work/docker-registry-driver-git/docker_registry/drivers/gitdriver.py"
+#dst = "/Users/peterbryzgalov/work/docker-registry/docker_registry/drivers/gitdriver.py"
+#shutil.copyfile(src,dst)
 
 
 import docker_registry.drivers.gitdriver
