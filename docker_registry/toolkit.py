@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
 
 import base64
-import distutils.version
 import functools
+import hashlib
 import logging
 import os
 import random
 import re
 import string
+import time
 import urllib
 
 import flask
+from M2Crypto import RSA
 import requests
-import rsa
 
 from docker_registry.core import compat
 json = compat.json
@@ -21,22 +22,41 @@ from . import storage
 from .lib import config
 
 cfg = config.load()
+
 logger = logging.getLogger(__name__)
 _re_docker_version = re.compile('docker/([^\s]+)')
 _re_authorization = re.compile(r'(\w+)[:=][\s"]?([^",]+)"?')
+_re_hex_image_id = re.compile(r'^([a-f0-9]{16}|[a-f0-9]{64})$')
 
 
-class DockerVersion(distutils.version.StrictVersion):
+def valid_image_id(f):
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        image_id = kwargs.get('image_id', '')
+        if _re_hex_image_id.match(image_id):
+            return f(*args, **kwargs)
+        return api_error("Invalid image ID", 404)
+    return wrapper
 
-    def __init__(self):
-        ua = flask.request.headers.get('user-agent', '')
-        m = _re_docker_version.search(ua)
-        if not m:
-            raise RuntimeError('toolkit.DockerVersion: cannot parse version')
-        version = m.group(1)
-        if '-' in version:
-            version = version.split('-')[0]
-        distutils.version.StrictVersion.__init__(self, version)
+
+def docker_client_version():
+    """Try and extract the client version from the User-Agent string
+
+    So we can warn older versions of the Docker engine/daemon about
+    incompatible APIs.  If we can't figure out the version (e.g. the
+    client is not a Docker engine), just return None.
+    """
+    ua = flask.request.headers.get('user-agent', '')
+    m = _re_docker_version.search(ua)
+    if not m:
+        return
+    version = m.group(1)
+    if '-' in version:
+        version = version.split('-')[0]
+    try:
+        return tuple(int(x) for x in version)
+    except ValueError:
+        return
 
 
 class SocketReader(object):
@@ -215,7 +235,8 @@ def check_token(args):
 
 
 def check_signature():
-    if not cfg.privileged_key:
+    pkey = cfg.privileged_key
+    if not pkey:
         return False
     headers = flask.request.headers
     signature = headers.get('X-Signature')
@@ -232,8 +253,9 @@ def check_signature():
                        ['{}:{}'.format(k, headers[k]) for k in header_keys])
     logger.debug('Signed message: {}'.format(message))
     try:
-        return rsa.verify(message, sigdata, cfg.privileged_key)
-    except rsa.VerificationError:
+        return pkey.verify(message_digest(message), sigdata, 'sha1')
+    except RSA.RSAError as e:
+        logger.exception(e)
         return False
 
 
@@ -243,6 +265,12 @@ def parse_content_signature(s):
     for k, v in lst:
         ret[k] = v
     return ret
+
+
+def message_digest(s):
+    m = hashlib.new('sha1')
+    m.update(s)
+    return m.digest()
 
 
 def requires_auth(f):
@@ -283,14 +311,23 @@ def exclusive_lock(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         lock_path = os.path.join(
-            '/var/lock', 'registry.{0}.lock'.format(f.func_name)
+            './', 'registry.{0}.lock'.format(f.func_name)
         )
         if os.path.exists(lock_path):
+            x = 0
+            while os.path.exists(lock_path) and x < 100:
+                logger.warn('Another process is creating the search database')
+                x += 1
+                time.sleep(1)
+            if x == 100:
+                raise Exception('Timedout waiting for db init')
             return
         lock_file = open(lock_path, 'w')
         lock_file.close()
-        result = f(*args, **kwargs)
-        os.remove(lock_path)
+        try:
+            result = f(*args, **kwargs)
+        finally:
+            os.remove(lock_path)
         return result
     return wrapper
 

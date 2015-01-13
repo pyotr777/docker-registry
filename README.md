@@ -1,3 +1,5 @@
+> **Notice:** *This repository hosts the classic (stable and recommended) python docker-registry. If you are looking for the next-generation (unstable and experimental) of docker distribution tools (including the new golang registry), you should head over to [docker/distribution](https://github.com/docker/distribution) instead.*
+
 Docker-Registry
 ===============
 
@@ -11,7 +13,7 @@ As the documentation evolves with different registry versions, be sure that befo
  * check which version of the registry you are running
  * switch to the corresponding tag to access the README that matches your product version
 
-The stable, released version is the [0.9.0 tag](https://github.com/docker/docker-registry/tree/0.9.0).
+The stable, released version is the [0.9.1 tag](https://github.com/docker/docker-registry/tree/0.9.1).
 
 Please also have a quick look at the [FAQ](FAQ.md) before reporting bugs.
 
@@ -54,6 +56,7 @@ docker run \
          -e STORAGE_PATH=/registry \
          -e AWS_KEY=myawskey \
          -e AWS_SECRET=myawssecret \
+         -e SEARCH_BACKEND=sqlalchemy \
          -p 5000:5000 \
          registry
 ```
@@ -221,11 +224,7 @@ common:
 On initialization, the `SQLAlchemyIndex` class checks the database
 version.  If the database doesn't exist yet (or does exist, but lacks
 a `version` table), the `SQLAlchemyIndex` creates the database and
-required tables.  To avoid several Gunicorn workers racing to create
-the database, you should launch your registry with
-[--preload][gunicorn-preload].  For example:
-
-    $ docker run -e GUNICORN_OPTS=[--preload] -p 5000:5000 registry
+required tables.
 
 ## Mirroring Options
 
@@ -366,5 +365,4 @@ Read [contributing](CONTRIBUTING.md)
 [search-endpoint]: http://docs.docker.com/reference/api/docker-io_api/#search
 [SQLAlchemy]: http://docs.sqlalchemy.org/
 [create_engine]: http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine
-[gunicorn-preload]: http://gunicorn-docs.readthedocs.org/en/latest/settings.html#preload-app
 
