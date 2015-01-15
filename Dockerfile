@@ -1,6 +1,6 @@
-# VERSION 0.1
+# VERSION 0.2
 # DOCKER-VERSION  0.7.3
-# AUTHOR:         Sam Alba <sam@docker.com>
+# AUTHOR:         Bryzgalov Peter <peterbryz@yahoo.com>
 # DESCRIPTION:    Image with docker-registry project and dependecies
 # TO_BUILD:       docker build -rm -t registry .
 # TO_RUN:         docker run -p 5000:5000 registry
@@ -29,6 +29,7 @@ RUN pip install /docker-registry/depends/docker-registry-core
 
 # Install registry
 RUN pip install file:///docker-registry#egg=docker-registry[bugsnag,newrelic,cors]
+
 RUN pip install nose
 RUN pip install mock
 
@@ -39,6 +40,8 @@ RUN patch \
 RUN pip install GitPython
 RUN mkdir /tmp/registry
 
+ENV STORAGE_PATH /tmp/registry
+ENV SQLALCHEMY_INDEX_DATABASE ////tmp/docker-registry.db
 ENV DOCKER_REGISTRY_CONFIG /docker-registry/config/config.yml
 ENV SETTINGS_FLAVOR dev
 

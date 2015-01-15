@@ -1,23 +1,18 @@
-#!/usr/bin/python
+#!/usr/local/bin/python
 
 import shutil
 import yaml
 import os
 
-#src = "/Users/peterbryzgalov/work/docker-registry-driver-git/docker_registry/drivers/gitdriver.py"
-#dst = "/Users/peterbryzgalov/work/docker-registry/docker_registry/drivers/gitdriver.py"
-#shutil.copyfile(src,dst)
-
 
 import docker_registry.drivers.gitdriver
 
-print docker_registry.drivers.gitdriver.version 
 config_path = os.environ.get('DOCKER_REGISTRY_CONFIG', 'config.yml')
 if not os.path.isabs(config_path):
         config_path = os.path.join(os.path.dirname(__file__), 
                                    'config', config_path)
 flavor = os.environ.get('SETTINGS_FLAVOR', 'dev')
-
+print config_path
 
 
 def envVar(var):
@@ -50,9 +45,12 @@ except Exception as e:
 if flavor:
     conf = conf[flavor]
     
+print flavor 
+print conf
+
 storage_path = envVar(conf["storage_path"])
 db = envVar(conf["sqlalchemy_index_database"])
-
+print db
 try :
 	os.remove(db)
 	print db
@@ -62,10 +60,14 @@ except OSError:
 dirs = [
 	docker_registry.drivers.gitdriver.working_dir, 
 	docker_registry.drivers.gitdriver.storage_dir,
-	docker_registry.drivers.gitdriver.imagetable
+	docker_registry.drivers.gitdriver.imagetable,
+	"images"
 ]
 
+print storage_path
+
 for dir in dirs:
+	print dir
 	target = os.path.join(storage_path,dir)	
 	try:
 		shutil.rmtree(target)
@@ -75,7 +77,7 @@ for dir in dirs:
 			os.remove(target)
 			print target
 		except OSError as ex:
-			pass
+			print "Cannot remove "+ str(target)
 
 """
 rm -rf /Users/peterbryzgalov/tmp/gitrepo 

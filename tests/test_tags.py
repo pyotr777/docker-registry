@@ -12,7 +12,7 @@ class TestTags(base.TestCase):
         if repos_name is None:
             repos_name = self.gen_random_string()
         image_id = self.gen_hex_string()
-        layer_data = self.gen_random_string(1024)
+        layer_data = self.gen_random_string(2048)
         self.upload_image(image_id, parent_id=None, layer=layer_data)
 
         # test tags create

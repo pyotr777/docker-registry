@@ -1,6 +1,10 @@
 #!/bin/bash
 
-cp /Users/peterbryzgalov/work/docker-registry-driver-git/docker_registry/drivers/gitdriver.py /Users/peterbryzgalov/work/docker-registry/docker_registry/drivers/
+if [ ! -d gitdriver ]
+then
+    mkdir gitdriver
+    cp -r ../docker-registry-driver-git/ ./gitdriver/
+fi
 docker rm reg
 docker rmi reg
 docker build -t reg .
