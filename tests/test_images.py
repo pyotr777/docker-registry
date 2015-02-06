@@ -24,7 +24,7 @@ class TestImages(base.TestCase):
         image_id = self.gen_hex_string()
         layer_data = self.gen_random_string(1024)
         self.upload_image(image_id, parent_id=None, layer=layer_data)
-
+        print "My storage scheme is ",images.store.scheme 
         # ensure the storage mechanism is LocalStorage or this test is bad
         self.assertTrue(images.store.scheme == 'file',
                         'Store must be LocalStorage')

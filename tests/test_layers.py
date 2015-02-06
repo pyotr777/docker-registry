@@ -110,7 +110,10 @@ class TestTarFilesInfo(base.TestCase):
 class TestLayers(base.TestCase):
 
     def setUp(self):
-        self.store = storage.load(kind='file')
+        mystore = storage.load()
+        print "I can load storage with scheme ", mystore.scheme
+        # self.store = storage.load(kind='file')
+        self.store = storage.load()
         self.filenames = list(comp(5, rndstr))
 
     def test_tar_archive(self):
@@ -231,12 +234,15 @@ class TestLayers(base.TestCase):
 
         ancestry = json.dumps([layer_2_id, layer_1_id])
         ancestry_path = self.store.image_ancestry_path(layer_2_id)
+        print "I store \""+str(ancestry)+"\" at "+ancestry_path
         self.store.put_content(ancestry_path, ancestry)
 
         layer_1_files_path = self.store.image_files_path(layer_1_id)
+        print "I store \""+str(json.dumps(layer_1))+"\" at "+layer_1_files_path
         self.store.put_content(layer_1_files_path, json.dumps(layer_1))
 
         layer_2_files_path = self.store.image_files_path(layer_2_id)
+        print "I store \""+str(json.dumps(layer_2))+"\" at "+layer_2_files_path
         self.store.put_content(layer_2_files_path, json.dumps(layer_2))
 
         diff_json = layers.get_image_diff_json(layer_2_id)
