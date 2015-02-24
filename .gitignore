@@ -12,7 +12,7 @@ htmlcov
 config/*.pem
 newrelic.ini
 reports
-
+images
 # Packages
 *.egg
 *.egg-info
